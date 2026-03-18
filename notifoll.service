@@ -1,0 +1,27 @@
+[Unit]
+Description=Notifoll - Ollama Text Processor Service
+Documentation=https://github.com/tuusuario/notifoll
+After=network.target graphical-session.target ollama.service
+Wants=graphical-session.target ollama.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/notifoll-service
+Restart=on-failure
+RestartSec=5
+
+# Variables de entorno esenciales
+Environment="DISPLAY=:0"
+Environment="XAUTHORITY=%h/.config/notifoll/Xauthority"
+Environment="DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus"
+Environment="XDG_RUNTIME_DIR=/run/user/%U"
+
+# Opcional para KDE
+Environment="KDE_FULL_SESSION=true"
+Environment="KDE_SESSION_VERSION=5"
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
