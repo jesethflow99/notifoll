@@ -53,6 +53,7 @@ El instalador:
 - instala servicio en `~/.config/systemd/user/notifoll.service`
 - crea config por defecto en `~/.config/notifoll/config.json`
 - habilita e inicia el servicio `notifoll`
+- ejecuta un smoke test post-instalación y, si falla, intenta reparación automática con `fixx11complete.fish`
 
 Gestores de paquetes soportados por detección automática:
 

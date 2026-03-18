@@ -6,6 +6,7 @@ set -l GREEN (set_color green)
 set -l RED (set_color red)
 set -l YELLOW (set_color yellow)
 set -l NORMAL (set_color normal)
+set -l SCRIPT_DIR (cd (dirname (status --current-filename)); and pwd)
 
 # Verificar que no estamos ejecutando como root
 if test (id -u) -eq 0
@@ -87,6 +88,35 @@ function install_packages
             echo $RED"❌ Gestor de paquetes no soportado automáticamente"$NORMAL
             return 1
     end
+end
+
+function run_smoke_test
+    set -l failed 0
+
+    if not test -x /usr/local/bin/notifoll-service
+        echo $RED"❌ Smoke test: no existe /usr/local/bin/notifoll-service"$NORMAL
+        set failed 1
+    end
+
+    if not test -f ~/.config/systemd/user/notifoll.service
+        echo $RED"❌ Smoke test: no existe ~/.config/systemd/user/notifoll.service"$NORMAL
+        set failed 1
+    end
+
+    if not ~/.local/share/notifoll/venv/bin/python -c "import pyperclip,pynput,requests,watchdog" > /dev/null 2>&1
+        echo $RED"❌ Smoke test: imports Python fallaron en el venv"$NORMAL
+        set failed 1
+    end
+
+    if not systemctl --user is-active notifoll > /dev/null 2>&1
+        echo $RED"❌ Smoke test: servicio notifoll no está activo"$NORMAL
+        set failed 1
+    end
+
+    if test $failed -eq 0
+        return 0
+    end
+    return 1
 end
 
 if not detect_package_manager
@@ -414,6 +444,30 @@ switch "$service_state"
         echo "  journalctl --user -u notifoll -n 50"
 end
 
+# Smoke test post-instalación con autorreparación X11
+echo ""
+echo "🧪 Ejecutando smoke test post-instalación..."
+if run_smoke_test
+    echo $GREEN"✅ Smoke test aprobado"$NORMAL
+else
+    echo $YELLOW"⚠️  Smoke test falló. Intentando autoreparación con fixx11complete.fish..."$NORMAL
+    if test -f "$SCRIPT_DIR/fixx11complete.fish"
+        chmod +x "$SCRIPT_DIR/fixx11complete.fish"
+        fish "$SCRIPT_DIR/fixx11complete.fish"
+        sleep 2
+        echo ""
+        echo "🔁 Reintentando smoke test..."
+        if run_smoke_test
+            echo $GREEN"✅ Smoke test aprobado después de autoreparación"$NORMAL
+        else
+            echo $RED"❌ Smoke test sigue fallando después de autoreparación"$NORMAL
+            echo "📋 Revisa logs con: journalctl --user -u notifoll -n 100 --no-pager"
+        end
+    else
+        echo $YELLOW"⚠️  No se encontró $SCRIPT_DIR/fixx11complete.fish, no se pudo autorreparar"$NORMAL
+    end
+end
+
 # Verificar grupo input
 if not groups | grep -q input
     echo ""
@@ -434,24 +488,6 @@ if contains s S $create_alias
     else
         echo $YELLOW"⚠️  El alias 'nf' ya existe en config.fish"$NORMAL
     end
-end
-
-# Probar instalación
-echo ""
-echo "🧪 Probando instalación..."
-if systemctl --user is-active notifoll > /dev/null 2>&1
-    echo $GREEN"✅ Servicio funcionando"$NORMAL
-    echo ""
-    echo "Para probar manualmente:"
-    echo "  /usr/local/bin/notifoll-service test"
-else
-    echo $RED"❌ El servicio no está funcionando"$NORMAL
-    echo ""
-    echo "📋 Para ver el error específico:"
-    echo "  journalctl --user -u notifoll -f"
-    echo ""
-    echo "🔧 También puedes probar manualmente:"
-    echo "  /usr/local/bin/notifoll-service"
 end
 
 echo ""
