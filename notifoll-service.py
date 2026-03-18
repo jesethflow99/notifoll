@@ -384,6 +384,9 @@ class TextProcessorApp:
     
     def verify_environment(self):
         """Verifica compatibilidad con el entorno"""
+        if os.environ.get('XDG_SESSION_TYPE') == 'wayland':
+            logger.warning("Sesión Wayland detectada: el atajo global puede no funcionar según compositor/permisos.")
+
         if 'FISH_VERSION' in os.environ:
             logger.info("🐟 Detectado Fish shell")
         
@@ -550,5 +553,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    como se usa esto?

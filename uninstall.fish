@@ -5,6 +5,60 @@ set -l RED (set_color red)
 set -l GREEN (set_color green)
 set -l YELLOW (set_color yellow)
 set -l NORMAL (set_color normal)
+set -g PKG_MANAGER ""
+
+function detect_package_manager
+    if command -v pacman > /dev/null
+        set -g PKG_MANAGER pacman
+    else if command -v apt-get > /dev/null
+        set -g PKG_MANAGER apt
+    else if command -v dnf > /dev/null
+        set -g PKG_MANAGER dnf
+    else if command -v yum > /dev/null
+        set -g PKG_MANAGER yum
+    else if command -v zypper > /dev/null
+        set -g PKG_MANAGER zypper
+    else if command -v apk > /dev/null
+        set -g PKG_MANAGER apk
+    else if command -v xbps-remove > /dev/null
+        set -g PKG_MANAGER xbps
+    else if command -v emerge > /dev/null
+        set -g PKG_MANAGER emerge
+    else
+        return 1
+    end
+    return 0
+end
+
+function remove_system_dependencies
+    if not command -v sudo > /dev/null
+        echo $YELLOW"⚠️  'sudo' no disponible. Omitiendo eliminación de dependencias del sistema."$NORMAL
+        return 0
+    end
+
+    switch $PKG_MANAGER
+        case pacman
+            sudo pacman -Rns --noconfirm libnotify xclip xdotool xorg-xauth wl-clipboard python-pip
+        case apt
+            sudo apt-get remove -y libnotify-bin xclip xdotool xauth wl-clipboard python3-pip python3-venv
+            sudo apt-get autoremove -y
+        case dnf
+            sudo dnf remove -y libnotify xclip xdotool xauth wl-clipboard python3-pip python3-virtualenv
+        case yum
+            sudo yum remove -y libnotify xclip xdotool xauth wl-clipboard python3-pip python3-virtualenv
+        case zypper
+            sudo zypper --non-interactive remove --clean-deps libnotify-tools xclip xdotool xauth wl-clipboard python3-pip python3-virtualenv
+        case apk
+            sudo apk del libnotify libnotify-tools xclip xdotool xauth wl-clipboard py3-pip py3-virtualenv
+        case xbps
+            sudo xbps-remove -Ry libnotify xclip xdotool xauth wl-clipboard python3-pip python3-virtualenv
+        case emerge
+            sudo emerge --ask=n --depclean x11-libs/libnotify x11-misc/xclip x11-misc/xdotool x11-apps/xauth gui-apps/wl-clipboard dev-python/pip dev-python/virtualenv
+        case '*'
+            echo $YELLOW"⚠️  Gestor de paquetes no soportado para purga automática"$NORMAL
+            return 1
+    end
+end
 
 echo $RED"🗑️  Desinstalando Notifoll..."$NORMAL
 
@@ -71,6 +125,23 @@ end
 # Recargar systemd
 echo "🔄 Recargando systemd..."
 systemctl --user daemon-reload
+
+# Preguntar si eliminar dependencias del sistema
+echo ""
+echo $YELLOW"¿Eliminar también dependencias del sistema (libnotify/xclip/xdotool/xauth/wl-clipboard/pip/venv)? (s/n)"$NORMAL
+echo $YELLOW"⚠️  Esto puede afectar otras aplicaciones que también las usan."$NORMAL
+read -l remove_deps
+if contains s S $remove_deps
+    if detect_package_manager
+        echo "📦 Eliminando dependencias usando: $PKG_MANAGER"
+        remove_system_dependencies
+        echo $GREEN"✅ Purga de dependencias finalizada (si estaban instaladas)"$NORMAL
+    else
+        echo $YELLOW"⚠️  No se detectó gestor soportado. Elimina dependencias manualmente."$NORMAL
+    end
+else
+    echo $YELLOW"⚠️  Dependencias del sistema conservadas"$NORMAL
+end
 
 echo ""
 echo $GREEN"✅ Notifoll desinstalado correctamente"$NORMAL

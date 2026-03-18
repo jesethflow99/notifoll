@@ -24,41 +24,188 @@ echo $BLUE"=================================="$NORMAL
 echo $GREEN"Instalando Notifoll para Fish Shell"$NORMAL
 echo $BLUE"=================================="$NORMAL
 
+# Detectar gestor de paquetes
+set -g PKG_MANAGER ""
+set -g __NOTIFOLL_APT_UPDATED 0
+set -g __NOTIFOLL_XBPS_UPDATED 0
+
+function detect_package_manager
+    if command -v pacman > /dev/null
+        set -g PKG_MANAGER pacman
+    else if command -v apt-get > /dev/null
+        set -g PKG_MANAGER apt
+    else if command -v dnf > /dev/null
+        set -g PKG_MANAGER dnf
+    else if command -v yum > /dev/null
+        set -g PKG_MANAGER yum
+    else if command -v zypper > /dev/null
+        set -g PKG_MANAGER zypper
+    else if command -v apk > /dev/null
+        set -g PKG_MANAGER apk
+    else if command -v xbps-install > /dev/null
+        set -g PKG_MANAGER xbps
+    else if command -v emerge > /dev/null
+        set -g PKG_MANAGER emerge
+    else
+        return 1
+    end
+    return 0
+end
+
+function install_packages
+    set -l packages $argv
+    if test (count $packages) -eq 0
+        return 0
+    end
+
+    switch $PKG_MANAGER
+        case pacman
+            sudo pacman -S --noconfirm --needed $packages
+        case apt
+            if test $__NOTIFOLL_APT_UPDATED -eq 0
+                sudo apt-get update
+                set -g __NOTIFOLL_APT_UPDATED 1
+            end
+            sudo apt-get install -y $packages
+        case dnf
+            sudo dnf install -y $packages
+        case yum
+            sudo yum install -y $packages
+        case zypper
+            sudo zypper --non-interactive install --no-recommends $packages
+        case apk
+            sudo apk add $packages
+        case xbps
+            if test $__NOTIFOLL_XBPS_UPDATED -eq 0
+                sudo xbps-install -Suy
+                set -g __NOTIFOLL_XBPS_UPDATED 1
+            end
+            sudo xbps-install -y $packages
+        case emerge
+            sudo emerge --ask=n $packages
+        case '*'
+            echo $RED"❌ Gestor de paquetes no soportado automáticamente"$NORMAL
+            return 1
+    end
+end
+
+if not detect_package_manager
+    echo $RED"❌ No se detectó un gestor de paquetes compatible"$NORMAL
+    echo "Instala manualmente: python3, python3-pip, python3-venv, libnotify, xclip, xdotool, xauth, wl-clipboard"
+    exit 1
+end
+echo "📦 Gestor detectado: $PKG_MANAGER"
+
 # Verificar Python
 echo "🔍 Verificando Python..."
 if not command -v python3 > /dev/null
     echo $RED"❌ Python3 no está instalado"$NORMAL
-    echo "Instálalo con: sudo pacman -S python python-pip"
-    exit 1
+    switch $PKG_MANAGER
+        case pacman
+            install_packages python
+        case apt dnf yum zypper xbps apk
+            install_packages python3
+        case emerge
+            install_packages dev-lang/python
+    end
+    if not command -v python3 > /dev/null
+        echo $RED"❌ No se pudo instalar python3 automáticamente"$NORMAL
+        exit 1
+    end
 end
+
+if not python3 -m venv --help > /dev/null 2>&1
+    echo $YELLOW"⚠️  Módulo venv no disponible. Instalando soporte venv..."$NORMAL
+    switch $PKG_MANAGER
+        case pacman
+            install_packages python
+        case apt
+            install_packages python3-venv
+        case dnf yum zypper xbps
+            install_packages python3-virtualenv
+        case apk
+            install_packages py3-virtualenv
+        case emerge
+            install_packages dev-python/virtualenv
+    end
+    if not python3 -m venv --help > /dev/null 2>&1
+        echo $RED"❌ No se pudo habilitar python3-venv automáticamente"$NORMAL
+        exit 1
+    end
+end
+
 set python_version (python3 --version 2>&1)
 echo $GREEN"✅ $python_version"$NORMAL
 
 # Verificar pip
 if not command -v pip3 > /dev/null
     echo "Instalando pip3..."
-    sudo pacman -S --noconfirm python-pip
+    switch $PKG_MANAGER
+        case pacman
+            install_packages python-pip
+        case apt dnf yum zypper xbps
+            install_packages python3-pip
+        case apk
+            install_packages py3-pip
+        case emerge
+            install_packages dev-python/pip
+    end
+    if not command -v pip3 > /dev/null
+        echo $RED"❌ No se pudo instalar pip3 automáticamente"$NORMAL
+        exit 1
+    end
 end
 
-# Instalar dependencias del sistema (Arch Linux)
+# Instalar dependencias del sistema
 echo "📦 Verificando dependencias del sistema..."
 set deps_installed false
 
 if not command -v notify-send > /dev/null
     echo $YELLOW"⚠️  libnotify no instalado. Instalando..."$NORMAL
-    sudo pacman -S --noconfirm libnotify
+    switch $PKG_MANAGER
+        case pacman dnf yum emerge xbps
+            install_packages libnotify
+        case apt
+            install_packages libnotify-bin
+        case zypper
+            install_packages libnotify-tools
+        case apk
+            install_packages libnotify libnotify-tools
+    end
     set deps_installed true
 end
 
 if not command -v xclip > /dev/null
     echo $YELLOW"⚠️  xclip no instalado. Instalando..."$NORMAL
-    sudo pacman -S --noconfirm xclip
+    install_packages xclip
     set deps_installed true
 end
 
 if not command -v xdotool > /dev/null
     echo $YELLOW"⚠️  xdotool no instalado (opcional)..."$NORMAL
-    sudo pacman -S --noconfirm xdotool
+    install_packages xdotool
+    set deps_installed true
+end
+
+if not command -v xauth > /dev/null
+    echo $YELLOW"⚠️  xauth no instalado. Instalando..."$NORMAL
+    switch $PKG_MANAGER
+        case pacman
+            install_packages xorg-xauth
+        case '*'
+            install_packages xauth
+    end
+    set deps_installed true
+end
+
+if not command -v wl-copy > /dev/null
+    echo $YELLOW"⚠️  wl-clipboard no instalado (recomendado para Wayland)..."$NORMAL
+    switch $PKG_MANAGER
+        case emerge
+            install_packages gui-apps/wl-clipboard
+        case '*'
+            install_packages wl-clipboard
+    end
     set deps_installed true
 end
 
@@ -130,6 +277,10 @@ export DISPLAY="${DISPLAY:-:0}"
 export XAUTHORITY="$USER_HOME/.config/notifoll/Xauthority"
 export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
 export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+export XDG_SESSION_TYPE="${XDG_SESSION_TYPE:-x11}"
+if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
+    export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
+fi
 
 exec "$VENV_PYTHON" "$SCRIPT_PATH" "$@"
 '
@@ -232,7 +383,7 @@ if command -v xauth > /dev/null
         echo $RED"❌ No se pudo generar magic cookie. Puede que necesites ejecutar 'xauth generate \$DISPLAY .'"$NORMAL
     end
 else
-    echo $YELLOW"⚠️  xauth no instalado. Instálalo con: sudo pacman -S xorg-xauth"$NORMAL
+    echo $YELLOW"⚠️  xauth no instalado. Instálalo con el gestor de paquetes de tu distro"$NORMAL
 end
 
 # Actualizar el archivo de servicio para usar este Xauthority (ya lo hicimos con sed)
