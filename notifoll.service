@@ -1,6 +1,6 @@
 [Unit]
 Description=Notifoll - Ollama Text Processor Service
-Documentation=https://github.com/tuusuario/notifoll
+Documentation=https://github.com/jesethflow99/notifoll
 After=network.target graphical-session.target ollama.service
 Wants=graphical-session.target ollama.service
 

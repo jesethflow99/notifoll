@@ -4,6 +4,8 @@ Notifoll es un helper para Linux que captura texto seleccionado con una tecla gl
 
 Está pensado para usarse en escritorio con **Fish Shell**, como **servicio de usuario de systemd**.
 
+Repositorio oficial: `https://github.com/jesethflow99/notifoll`
+
 ## Características
 
 - Atajo global configurable (`key_trigger`, por defecto `f8`).
@@ -37,6 +39,15 @@ Dependencias Python instaladas en venv:
 - `watchdog`
 
 ## Instalación
+
+Instalación rápida desde GitHub:
+
+```bash
+git clone https://github.com/jesethflow99/notifoll.git
+cd notifoll
+chmod +x install.fish
+./install.fish
+```
 
 Desde la raíz del proyecto:
 
